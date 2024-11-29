@@ -1,0 +1,126 @@
+
+
+
+import math
+
+def distance(p1, p2):
+    return math.sqrt((p2[0] - p1[0])**2 + (p2[1] - p1[1])**2)
+
+def normalize_polygon(coords):
+    """Standardize polygon position and scale for comparison:
+    1. Center at centroid to make position-independent
+    2. Scale to unit size to make size-independent"""
+    cx = sum(p[0] for p in coords) / len(coords)
+    cy = sum(p[1] for p in coords) / len(coords)
+    
+    centered = [[p[0] - cx, p[1] - cy] for p in coords]
+    
+    max_dist = max(distance([0, 0], p) for p in centered)
+    if max_dist > 0:
+        normalized = [[p[0]/max_dist, p[1]/max_dist] for p in centered]
+        return normalized
+    return centered
+
+def rotate_point(p, angle):
+    cos_a = math.cos(angle)
+    sin_a = math.sin(angle)
+    return [p[0] * cos_a - p[1] * sin_a, 
+            p[0] * sin_a + p[1] * cos_a]
+
+def rotate_polygon(poly, angle):
+    return [rotate_point(p, angle) for p in poly]
+
+def points_almost_equal(p1, p2, tolerance=1e-6):
+    return abs(p1[0] - p2[0]) < tolerance and abs(p1[1] - p2[1]) < tolerance
+
+def polygons_almost_equal(poly1, poly2, tolerance=1e-6):
+    if len(poly1) != len(poly2):
+        return False
+    return all(points_almost_equal(p1, p2, tolerance) 
+              for p1, p2 in zip(poly1, poly2))
+
+def check_superimposable(p1, p2):
+    """Check if two polygons can be perfectly aligned through rotation only.
+    This excludes mirror images, as they require reflection to align."""
+    if len(p1) != len(p2):
+        return False
+    
+    p1_norm = normalize_polygon(p1)
+    p2_norm = normalize_polygon(p2)
+    n = len(p1)
+    
+    # Try each vertex of p2 as a potential starting point
+    for i in range(n):
+        p2_rot = p2_norm[i:] + p2_norm[:i]
+        
+        # Calculate rotation needed to align first edges
+        v1 = [p1_norm[1][0] - p1_norm[0][0], p1_norm[1][1] - p1_norm[0][1]]
+        v2 = [p2_rot[1][0] - p2_rot[0][0], p2_rot[1][1] - p2_rot[0][1]]
+        angle = math.atan2(v2[1], v2[0]) - math.atan2(v1[1], v1[0])
+        
+        p2_transformed = rotate_polygon(p2_rot, -angle)
+        
+        if polygons_almost_equal(p1_norm, p2_transformed):
+            return True
+    
+    return False
+
+def are_shapes_similar(p1, p2):
+    """First check if shapes have same proportions by comparing
+    normalized pairwise distances between vertices."""
+    if len(p1) != len(p2):
+        return False
+    
+    def get_distances(coords):
+        n = len(coords)
+        distances = []
+        for i in range(n):
+            for j in range(i + 1, n):
+                dist = distance(coords[i], coords[j])
+                distances.append(dist)
+        return distances
+    
+    dist1 = get_distances(p1)
+    dist2 = get_distances(p2)
+    
+    # Normalize by smallest non-zero distance to make scale-independent
+    min_dist1 = min(d for d in dist1 if d > 0)
+    min_dist2 = min(d for d in dist2 if d > 0)
+    
+    dist1 = [d/min_dist1 for d in dist1]
+    dist2 = [d/min_dist2 for d in dist2]
+    
+    # Sort to make rotation-independent
+    dist1.sort()
+    dist2.sort()
+    
+    return all(abs(d1 - d2) < 1e-6 for d1, d2 in zip(dist1, dist2))
+
+def find_matching_earrings(n, earrings):
+    """Two-step matching process:
+    1. Quick filter using distance patterns to find similar shapes
+    2. Detailed check for exact superimposition through rotation"""
+    result = []
+    for i in range(n):
+        for j in range(i + 1, n):
+            if are_shapes_similar(earrings[i], earrings[j]):
+                if check_superimposable(earrings[i], earrings[j]):
+                    result.extend([i + 1, j + 1])
+    return sorted(set(result))
+
+def main():
+    n = int(input())
+    earrings = []
+    for _ in range(n):
+        m = int(input())
+        vertices = []
+        for _ in range(m):
+            x, y = map(int, input().split())
+            vertices.append([x, y])
+        earrings.append(vertices)
+    
+    result = find_matching_earrings(n, earrings)
+    print(*result)
+
+if __name__ == "__main__":
+    main()
